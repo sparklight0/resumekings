@@ -1,14 +1,28 @@
 package com.example.t_ste.resumekings;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.Drawable;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentTransaction;
+import android.telecom.Call;
+import android.text.InputType;
+import android.util.Log;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.RatingBar;
 import android.widget.Toast;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
 
 /**
  * A simple {@link Fragment} subclass.
@@ -19,24 +33,11 @@ import android.widget.Toast;
  * create an instance of this fragment.
  */
 public class Fragment_View_Single_Applicant extends Fragment {
+    // THE STANDARD BLOCK FOR A FRAGMENT DONT EDIT IN HERE ///////////
+    public Fragment_View_Single_Applicant() {}
 
-    Button SaveApplicant;
-    Button DeleteApplicant;
-    Applicant_Profile ap;
-
-    public Fragment_View_Single_Applicant() {
-        // Required empty public constructor
-    }
-
-    /**
-     * Use this factory method to create a new instance of
-     * this fragment using the provided parameters.
-     *
-     * @return A new instance of fragment Fragment_View_Single_Applicant.
-     */
     public static Fragment_View_Single_Applicant newInstance() {
-        Fragment_View_Single_Applicant fragment = new Fragment_View_Single_Applicant();
-        return fragment;
+        return new Fragment_View_Single_Applicant();
     }
 
     @Override
@@ -44,39 +45,184 @@ public class Fragment_View_Single_Applicant extends Fragment {
         super.onCreate(savedInstanceState);
     }
 
+    public String getName(){
+        return "ViewSingleApplicant";
+    }
+    // THE STANDARD BLOCK FOR A FRAGMENT DONT EDIT IN HERE ///////////
+
+
+    // INITIALIZERS //////////
+    View view;
+    Button deleteApplicant;
+    Button updateApplicant;
+    Button showResume;
+    Applicant_Profile ap;
+    EditText applicantName;
+    EditText applicantEmail;
+    EditText applicantNotes;
+    EditText applicantPhone;
+    RatingBar ratingBar;
+    Boolean Update = false;
+    ImageView ResumeImage;
+    ImageView ProfileImage;
+    ImageView ResumeOverlay;
+    final Call_Web_API CWA = new Call_Web_API();
+    // INITIALIZERS //////////
+
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_view_single_applicant, container, false);
+        view = inflater.inflate(R.layout.fragment_view_single_applicant, container, false);
         ap = ((MainActivity)getActivity()).getTempProfile();
 
-        SaveApplicant = (Button) view.findViewById(R.id.save_applicant);
-        DeleteApplicant = (Button) view.findViewById(R.id.delete_applicant);
+        if(ap == null) return view;
 
-        DeleteApplicant.setOnClickListener(new View.OnClickListener(){
+        deleteApplicant = (Button) view.findViewById(R.id.delete_applicant);
+        updateApplicant = (Button) view.findViewById(R.id.update_applicant);
+        showResume      = (Button) view.findViewById(R.id.show_resume);
+        ratingBar       = (RatingBar) view.findViewById(R.id.ratingBar);
+
+        applicantName   = (EditText) view.findViewById(R.id.applicantName);
+        applicantPhone  = (EditText) view.findViewById(R.id.applicantPhone);
+        applicantEmail  = (EditText) view.findViewById(R.id.applicantEmail);
+        applicantNotes  = (EditText) view.findViewById(R.id.applicantNotes);
+
+        applicantEmail.setEnabled(false);
+        applicantName.setEnabled(false);
+        applicantNotes.setEnabled(false);
+        applicantPhone.setEnabled(false);
+
+        ResumeImage = (ImageView) view.findViewById(R.id.ResumePicture);
+        ProfileImage = (ImageView) view.findViewById(R.id.ProfilePicture);
+        // TODO: add the resume overlay to the xml and then uncomment the few lines here to implement it
+        //ResumeOverlay = (ImageView) view.findViewById(R.id.ResumeOverlay);
+
+        new DownloadImageFromInternet(ProfileImage).execute(ap.getProfilePictureURL());
+        new DownloadImageFromInternet(ResumeImage).execute(ap.getResumePictureURL());
+        //new DownloadImageFromInternet(ResumeOverlay).execute(ap.getResumeOverlayURL());
+        System.out.println(ap.getProfilePictureURL());
+        System.out.println(ap.getResumePictureURL());
+
+        final Call_Web_API CWA = new Call_Web_API();
+
+        if(ap.getProfilePictureURL()!=null){
+        new DownloadImageFromInternet(ProfileImage).execute(ap.getProfilePictureURL());
+        new DownloadImageFromInternet(ResumeImage).execute(ap.getResumePictureURL());}
+
+        ratingBar.setRating(ap.getStars());
+        applicantName.setText(ap.getUserName());
+        applicantPhone.setText(ap.getPhoneNumber());
+        applicantEmail.setText(ap.getEmail());
+        applicantNotes.setText(ap.getNotes());
+
+        deleteApplicant.setOnClickListener(new View.OnClickListener(){
             @Override
             public void onClick(View V){
                 ((MainActivity)getActivity()).removeFromCache(ap);
-                ((MainActivity)getActivity()).displayView("ViewApplicants");
+
+                if (((MainActivity) getActivity()).API_Mode)
+                    CWA.doInBackground(ap,"Delete"); //Passes the SQL ID and calls the "Delete function
+                ((MainActivity)getActivity()).setAddToBackStack(false);
+                if(((MainActivity)getActivity()).cachedApplicantProfiles.size() != 0) {
+                    ((MainActivity) getActivity()).viewApplicant(((MainActivity) getActivity()).cachedApplicantProfiles.get(0));
+                }
+                else {
+                    Toast.makeText(getContext(), "create an applicant!", Toast.LENGTH_SHORT).show();
+                    ((MainActivity) getActivity()).setAddToBackStack(false);
+                    ((MainActivity) getActivity()).displayView("CreateNewApplicant");
+                }
             }
         });
 
-        SaveApplicant.setOnClickListener(new View.OnClickListener(){
+        updateApplicant.setOnClickListener(new View.OnClickListener(){
+            @Override
+            public void onClick(View v){
+                if(!Update){
+                    applicantName.setInputType(InputType.TYPE_CLASS_TEXT);
+                    applicantName.setEnabled(true);
+                    applicantPhone.setInputType(InputType.TYPE_CLASS_TEXT);
+                    applicantPhone.setEnabled(true);
+                    applicantEmail.setInputType(InputType.TYPE_CLASS_TEXT);
+                    applicantEmail.setEnabled(true);
+                    applicantNotes.setInputType(InputType.TYPE_CLASS_TEXT);
+                    applicantNotes.setEnabled(true);
+                    ratingBar.setIsIndicator(false);
+                    Update = true;
+                    System.out.println(ap.getResumePictureURL());
+                    updateApplicant.setText("Update Applicant");
+                }
+                else {
+                    Applicant_Profile temp = new Applicant_Profile();
+                    temp.setID(ap.getID());
+                    temp.setUserName(applicantName.getText().toString());
+                    temp.setEmail(applicantEmail.getText().toString());
+                    temp.setPhoneNumber(applicantPhone.getText().toString());
+                    temp.setNotes(applicantNotes.getText().toString());
+                    temp.setStars((int)ratingBar.getRating());
+                    temp.setProfilePicture(ap.getProfilePicture());
+                    temp.setResumePictureURL(ap.getResumePictureURL());
+                    temp.setResumeOverlayURL(ap.getResumeOverlayURL());
+                    // TODO: add in the 3 photos and follow that they get switched out properly and added to s3...Done?
+
+                    ((MainActivity)getActivity()).updateCache(ap, temp);
+                    ((MainActivity)getActivity()).setAddToBackStack(false);
+                    ((MainActivity)getActivity()).viewApplicant(temp);
+                    CWA.doInBackground(temp,"Put"); //Updates the applicant in the web api
+
+                }
+            }
+        });
+
+        showResume.setOnClickListener(new View.OnClickListener(){
             @Override
             public void onClick(View V){
-                Applicant_Profile ap = new Applicant_Profile();
-                ap.setUserName("LULZ MOAR BREAK");
-                ap.setStars(1);
-                ap.setEmail("BORKED");
-                ((MainActivity)getActivity()).addToCache(ap);
-                ((MainActivity)getActivity()).displayView("ViewApplicants");
+                ((MainActivity)getActivity()).setAddToBackStack(false);
+                ((MainActivity)getActivity()).displayView("ViewApplicantResume");
             }
         });
-
         // Inflate the layout for this fragment
         return view;
     }
 
-    public String getName(){
-        return "ViewSingleApplicant";
+    @Override
+    public void onResume() {
+        super.onResume();
+
+        getView().setFocusableInTouchMode(true);
+        getView().requestFocus();
+        getView().setOnKeyListener(new View.OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
+                    // handle back button's click listener
+                    getActivity().onBackPressed();
+                    return true;
+                }
+                return false;
+            }
+        });
+    }
+
+
+    private class DownloadImageFromInternet extends AsyncTask<String, Void, Bitmap> {
+        ImageView imageView;
+
+        public DownloadImageFromInternet(ImageView imageView) {
+            this.imageView = imageView;
+        }
+
+        protected Bitmap doInBackground(String... urls) {
+            String imageURL = urls[0];
+            Bitmap bimage = null;
+            try {
+                InputStream in = new java.net.URL(imageURL).openStream();
+                bimage = BitmapFactory.decodeStream(in);
+            } catch (Exception e) {
+            }
+            return bimage;
+        }
+        protected void onPostExecute(Bitmap result) {
+            imageView.setImageBitmap(result);
+        }
     }
 }
